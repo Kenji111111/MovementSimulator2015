@@ -32,7 +32,7 @@ public class MovementSimulator2015 extends PApplet {
 	float deltaVariance = .95f;
 	float startTimingVariance = 60;
 	float startSpeedVariance = 3;
-	float timeIncrease = 1.1f;
+	float timeIncrease = 1.0f;
 	// TODO friction variance
 	//float frictionAmount = 0.0f;
 	
@@ -68,7 +68,7 @@ public class MovementSimulator2015 extends PApplet {
 		// Set the window size
 		size(900, 600);
 		// Create the physics environment for the program
-		physics = new Physics(this, getWidth(), getHeight());
+		physics = new Physics(this, 4000, getHeight());
 		physics.setDensity(1.0f);
 		world = physics.getWorld();
 		
@@ -77,7 +77,11 @@ public class MovementSimulator2015 extends PApplet {
 		parent1 = parent2 = theFirstBuddy;
 		
 		try {
-			Scanner sc = new Scanner(new File("data/savedBuddies.txt"));
+			File f = new File("data/savedBuddies.txt");
+			if(!f.exists())
+				f.createNewFile();
+			
+			Scanner sc = new Scanner(f);
 			if(sc.hasNext())
 				parent1 = sc.nextLine();
 			if(sc.hasNext())
@@ -91,12 +95,19 @@ public class MovementSimulator2015 extends PApplet {
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 		
 		// Set the first parents to be the input
-		//parent1 = parent2 = theFirstBuddy;
+		nextGen1 = parent1;
+		nextGen2 = parent2;
 		
-		currentBuddy = loadBuddy(parent1, false);
+		//for(Body b : physics.getBorder())
+			
+		
+		currentBuddy = loadBuddy(parent1);
 		// Base the score on how far away the buddy gets from this point
 		startPixel = currentBuddy.parts.get(0).getPosition().x;
 		
@@ -133,6 +144,7 @@ public class MovementSimulator2015 extends PApplet {
 			// Parents of the next generation
 			float myScore = (currentBuddy.getDistanceTravelled(startPixel));
 			if(myScore > score1 || myScore > score2){
+				System.out.println(currentBuddy.toString());
 				if(score1 < score2){
 					nextGen1 = currentBuddy.toString();
 					score1 = myScore;
@@ -174,6 +186,7 @@ public class MovementSimulator2015 extends PApplet {
 	public void incrementGeneration(){
 		generationBuddyNumber = 0;
 		currentGeneration++;
+		
 		parent1 = nextGen1;
 		parent2 = nextGen2;
 
@@ -480,6 +493,7 @@ public class MovementSimulator2015 extends PApplet {
 	public void keyPressed(){
 		switch(key){
 		case '1':
+			this.frameRate(1000);
 			break;
 			
 		case '2':
