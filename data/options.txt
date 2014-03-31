@@ -1,0 +1,6 @@
+generationSize=8
+maxTorque=10000.0
+ticksPerSibling=600
+targetFPS=60.0
+gravity=-10
+wind=0

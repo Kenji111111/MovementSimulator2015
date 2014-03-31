@@ -2,12 +2,26 @@
 import processing.core.*;
 import processing.xml.*;
 
+
 import java.applet.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.*;
 import java.net.*;
 import java.text.*;
 import java.util.*;
+import java.util.prefs.Preferences;
+
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSlider;
+import javax.swing.JTextField;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 import org.jbox2d.collision.ShapeType;
 import org.jbox2d.dynamics.*;
@@ -17,7 +31,7 @@ import org.jbox2d.collision.*;
 import org.jbox2d.common.Vec2;
 import org.w3c.dom.css.Rect;
 
-public class MovementSimulator2015 extends PApplet {
+public class MovementSimulator2015 extends PApplet implements ActionListener, ChangeListener {
 	
 	/**
 	 *  This is the main class for the MovementSimulator2015.
@@ -26,8 +40,27 @@ public class MovementSimulator2015 extends PApplet {
 	 */
 	
 	// Changeable values
+	// TODO wind modifier
 	int generationSize = 8;
+	int minGenerationSize = 1;
+	int maxGenerationSize = 64;
+	
 	int maxTick = 60*10;
+	int minTickSize = 10;
+	int maxTickSize = 1000;
+	
+	float targetFPS = 60;
+	float minTargetFPS = 1;
+	float maxTargetFPS = 512;
+	
+	int gravity = -10;
+	int minGravity = -50;
+	int maxGravity = 50;
+	
+	int wind = 0;
+	int minWind = -30;
+	int maxWind = 30;
+	
 	float maxMotorTorque = 10000f;
 	float deltaVariance = .95f;
 	float startTimingVariance = 60;
@@ -36,25 +69,30 @@ public class MovementSimulator2015 extends PApplet {
 	// TODO friction variance
 	//float frictionAmount = 0.0f;
 	
+	// TODO make variance go up when improvements aren't made
 	
 	// Important variables for the program
-	Physics physics;
-	World world;
+	private Physics physics;
+	private World world;
 	
-	int currentGeneration = 0;
-	int generationBuddyNumber = 0;
-	int currentTick = 0;
-	String parent1 = "";
-	String parent2 = "";
+	private Preferences prefs;
+	
+	private int currentGeneration = 0;
+	private int generationBuddyNumber = 0;
+	private int currentTick = 0;
+	private String parent1 = "";
+	private String parent2 = "";
 
-	float score1 = -1000;
-	float score2 = -1000;
-	String nextGen1 = "";
-	String nextGen2 = "";
-	// TODO make variance reset after a new generation is created
+	private float score1 = -1000;
+	private float score2 = -1000;
+	private String nextGen1 = "";
+	private String nextGen2 = "";
 	
-	String examplePerson = "type,topWidth,topHeight/{appendage}{appendage}/walkingAlgorithm";
-	String theFirstBuddy = "RECTANGLE,50,50/{CIRCLE,0,10|RECTANGLE,20,50|CIRCLE,0,10|RECTANGLE,20,50}{CIRCLE,0,10|RECTANGLE,20,50|CIRCLE,0,10|RECTANGLE,20,50}/[2,2,3,1,2,2,3,1|30][-2,-2,-3,-1,-2,-2,-3,-1|30]";
+	private String buddySaveLoc = "data/savedBuddies.txt";
+	private String optionsSaveLoc = "data/options.txt";
+	
+	private String examplePerson = "type,topWidth,topHeight/{appendage}{appendage}/walkingAlgorithm";
+	private String theFirstBuddy = "RECTANGLE,50,50/{CIRCLE,0,10|RECTANGLE,20,50|CIRCLE,0,10|RECTANGLE,20,50}{CIRCLE,0,10|RECTANGLE,20,50|CIRCLE,0,10|RECTANGLE,20,50}/[2,2,3,1,2,2,3,1|30][-2,-2,-3,-1,-2,-2,-3,-1|30]";
 	
 	//LinkedList<Buddy> buddyBattalion  = new LinkedList<Buddy>();
 	Buddy currentBuddy;
@@ -63,8 +101,29 @@ public class MovementSimulator2015 extends PApplet {
 	int loadPosY = 300;
 	
 	float startPixel = 0;
-
+	
+	// GUI Elements
+	JFrame controlFrame;
+	JPanel controlPanel;
+	
+	JLabel generationEditLabel = new JLabel("Generation size:");
+	JSlider generationSizeEdit;
+	JLabel torqueEditLabel = new JLabel("Max motor torque:");
+	JSlider torqueEditSlider;
+	JLabel tickEditLabel = new JLabel("Ticks per sibling:");
+	JSlider tickEditSlider;
+	JLabel fpsTargetLabel = new JLabel("Target FPS:");
+	JSlider fpsTargetSlider;
+	JLabel gravityEditLabel = new JLabel("Force of gravity:");
+	JSlider gravityEditSlider;
+	JLabel windEditLabel = new JLabel("Force of wind");
+	JSlider windEditSlider;
+	// TODO replay system
+	JLabel controlsList = new JLabel("<HTML>Keyboard controls:<BR>Replay best buddies: NONE</HTML>");
+	JButton resetButton = new JButton("reset simulation");
+	
 	public void setup() {
+		loadPrefs();
 		// Set the window size
 		size(900, 600);
 		// Create the physics environment for the program
@@ -72,12 +131,15 @@ public class MovementSimulator2015 extends PApplet {
 		physics.setDensity(1.0f);
 		world = physics.getWorld();
 		
+		initializeGUI();
+		
+		
 		// Locks the framerate. Not currently in use
-		//frameRate(120);
+		frameRate(targetFPS);
 		parent1 = parent2 = theFirstBuddy;
 		
 		try {
-			File f = new File("data/savedBuddies.txt");
+			File f = new File(buddySaveLoc);
 			if(!f.exists())
 				f.createNewFile();
 			
@@ -93,10 +155,10 @@ public class MovementSimulator2015 extends PApplet {
 			if(sc.hasNext())
 				score2 = sc.nextFloat();
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
+			// Well it creates a new file if it doesn't exist sooooo....
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
+			// When your computer sucks this happens
 			e.printStackTrace();
 		}
 		
@@ -104,7 +166,6 @@ public class MovementSimulator2015 extends PApplet {
 		nextGen1 = parent1;
 		nextGen2 = parent2;
 		
-		//for(Body b : physics.getBorder())
 			
 		
 		currentBuddy = loadBuddy(parent1);
@@ -112,8 +173,6 @@ public class MovementSimulator2015 extends PApplet {
 		startPixel = currentBuddy.parts.get(0).getPosition().x;
 		
 	}
-	
-	boolean landing = true;
 	int fallTime = 140;
 	// Draw is basically used as a new thread with a wile loop for this program
 	public void draw() {
@@ -122,12 +181,8 @@ public class MovementSimulator2015 extends PApplet {
 		
 		// This draws some helpful and informative text on the screen at all times. 
 		drawGUI();
-		
-		if(currentTick == fallTime){
-			landing = false;
-		}
 			
-		if(!landing){
+		if(currentTick >= fallTime){
 			int currentStage = currentBuddy.getStage();
 			int i = 0;
 			
@@ -140,11 +195,10 @@ public class MovementSimulator2015 extends PApplet {
 		currentTick++;
 		if(currentTick >= maxTick + fallTime){
 			//System.out.println(currentBuddy.toString());
-			// TODO fix
 			// Parents of the next generation
 			float myScore = (currentBuddy.getDistanceTravelled(startPixel));
 			if(myScore > score1 || myScore > score2){
-				System.out.println(currentBuddy.toString());
+				//System.out.println(currentBuddy.toString());
 				if(score1 < score2){
 					nextGen1 = currentBuddy.toString();
 					score1 = myScore;
@@ -160,7 +214,6 @@ public class MovementSimulator2015 extends PApplet {
 			}
 			// Resetting variables
 			currentTick = 0;
-			landing = true;
 			// Deleting the old buddy 
 			for(Body b : currentBuddy.parts){
 				physics.removeBody(b);
@@ -173,10 +226,86 @@ public class MovementSimulator2015 extends PApplet {
 		
 	}
 	
+	public void initializeGUI(){
+		// GUI
+		controlFrame = new JFrame("Controls");
+		controlPanel = new JPanel();
+		controlFrame.setLocation((Toolkit.getDefaultToolkit().getScreenSize().width + getWidth()) / 2 + 20, Toolkit.getDefaultToolkit().getScreenSize().height / 2 - getHeight() / 2 + getLocation().y);
+		controlFrame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		controlPanel
+				.setLayout(new BoxLayout(controlPanel, BoxLayout.PAGE_AXIS));
+		// Generation Size Sliders
+		generationSizeEdit = new JSlider(minGenerationSize, maxGenerationSize, generationSize);
+		Hashtable labelTable = new Hashtable();
+		labelTable.put(new Integer(generationSize), new JLabel(Integer.toString(generationSize)));
+		generationSizeEdit.setLabelTable(labelTable);
+		generationSizeEdit.setPaintLabels(true);
+		generationSizeEdit.addChangeListener(this);
+		// Torque
+		torqueEditSlider = new JSlider();
+		labelTable = new Hashtable();
+		labelTable.put(new Integer(torqueEditSlider.getValue()), new JLabel(Integer.toString(torqueEditSlider.getValue())));
+		torqueEditSlider.setLabelTable(labelTable);
+		torqueEditSlider.setPaintLabels(true);
+		torqueEditSlider.addChangeListener(this);
+		// Ticks
+		tickEditSlider = new JSlider(minTickSize, maxTickSize, maxTick);
+		labelTable = new Hashtable();
+		labelTable.put(new Integer(maxTick), new JLabel(Integer.toString(maxTick + fallTime)));
+		tickEditSlider.setLabelTable(labelTable);
+		tickEditSlider.setPaintLabels(true);
+		tickEditSlider.addChangeListener(this);
+		// FPS
+		fpsTargetSlider = new JSlider((int) minTargetFPS, (int) maxTargetFPS, (int) targetFPS);
+		labelTable = new Hashtable();
+		labelTable.put(new Integer((int) targetFPS), new JLabel(Integer.toString((int) targetFPS)));
+		fpsTargetSlider.setLabelTable(labelTable);
+		fpsTargetSlider.setPaintLabels(true);
+		fpsTargetSlider.addChangeListener(this);
+		// Gravity
+		gravityEditSlider = new JSlider(minGravity, maxGravity, gravity);
+		labelTable = new Hashtable();
+		labelTable.put(new Integer(gravity), new JLabel(Integer.toString(gravity)));
+		gravityEditSlider.setLabelTable(labelTable);
+		gravityEditSlider.setPaintLabels(true);
+		gravityEditSlider.addChangeListener(this);
+		// TODO variance
+		windEditSlider = new JSlider(minWind, maxWind, wind);
+		labelTable = new Hashtable();
+		labelTable.put(new Integer(wind), new JLabel(Integer.toString(wind)));
+		windEditSlider.setLabelTable(labelTable);
+		windEditSlider.setPaintLabels(true);
+		windEditSlider.addChangeListener(this);
+
+		// Reset Button
+		resetButton.addActionListener(this);
+		//resetButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+		controlPanel.add(generationEditLabel);
+		controlPanel.add(generationSizeEdit);
+		controlPanel.add(torqueEditLabel);
+		controlPanel.add(torqueEditSlider);
+		controlPanel.add(tickEditLabel);
+		controlPanel.add(tickEditSlider);
+		controlPanel.add(fpsTargetLabel);
+		controlPanel.add(fpsTargetSlider);
+		controlPanel.add(gravityEditLabel);
+		controlPanel.add(gravityEditSlider);
+		controlPanel.add(windEditLabel);
+		controlPanel.add(windEditSlider);
+		//controlPanel.add(controlsList);
+		controlPanel.add(resetButton);
+		
+		controlFrame.add(controlPanel);
+		controlFrame.pack();
+		controlFrame.setVisible(true);
+	}
+	
 	public void drawGUI(){
+		this.getGraphics().setColor(Color.BLACK);
 		this.text(" FPS: " + Math.round(this.frameRate) +
 				"\n Current Generation: " + currentGeneration + 
-				"\n Sibling #: " + generationBuddyNumber + 
+				"\n Sibling #: " + generationBuddyNumber + "/" + generationSize + 
 				"\n Tick: " + currentTick + "/" + (maxTick + fallTime) + 
 				"\n Distance Travelled: " + currentBuddy.getDistanceTravelled(startPixel) +
 				/*"\n Velocity: " + currentBuddy.getHead().getLinearVelocity() + "\n " + landing +*/ 
@@ -200,16 +329,17 @@ public class MovementSimulator2015 extends PApplet {
 			bw.write(parent1 + "\n" + parent2 + "\n" + currentGeneration + "\n" + score1 + "\n" + score2);
 			bw.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
+			// An error probably means that java needs reinstallings
 			e.printStackTrace();
 		}
 	
 	}
 	
 	// The main method is important for many java programs!
-	static public void main(String args[]) {
+		static public void main(String args[]) {
 		PApplet.main(new String[] { "--bgcolor=#ECE9D8", "MovementSimulator2015" });
 	}
+	
 	// This is allows you to load a buddy without specifying it to be not verbose
 	public Buddy loadBuddy(String buddy){
 		return loadBuddy(buddy, false);
@@ -476,6 +606,55 @@ public class MovementSimulator2015 extends PApplet {
 		return null;
 	}
 	
+	private void savePrefs(){
+		File f = new File(optionsSaveLoc);
+		if(!f.exists()){
+			try {
+				f.createNewFile();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		try {
+			BufferedWriter bf = new BufferedWriter(new FileWriter(f));
+			bf.write("generationSize=" + generationSize + "\nmaxTorque=" + maxMotorTorque + "\nticksPerSibling=" + maxTick + "\ntargetFPS="+ targetFPS + "\ngravity=" + gravity + "\nwind=" + wind);
+			bf.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		// Generation size
+		// Max motor torque
+		// Ticks per sibling
+		// Target fps
+		// Gravity
+		
+	}
+	
+	private void loadPrefs(){
+		try {
+			Scanner sc = new Scanner(new File(optionsSaveLoc));
+			String s = sc.nextLine();
+			generationSize = Integer.parseInt(s.substring(s.indexOf('=') + 1));
+			s = sc.nextLine();
+			maxMotorTorque = Float.parseFloat(s.substring(s.indexOf('=') + 1));
+			s = sc.nextLine();
+			maxTick = Integer.parseInt(s.substring(s.indexOf('=') + 1));
+			s = sc.nextLine();
+			targetFPS = Float.parseFloat(s.substring(s.indexOf('=') + 1));
+			s = sc.nextLine();
+			gravity = Integer.parseInt(s.substring(s.indexOf('=') + 1));
+			s = sc.nextLine();
+			wind = Integer.parseInt(s.substring(s.indexOf('=') + 1));
+			
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+	
 	enum partType {RECTANGLE, CIRCLE, POLYGON};
 	
 	private partType toEnum(String type){
@@ -488,7 +667,6 @@ public class MovementSimulator2015 extends PApplet {
 		
 		return partType.POLYGON;
 	}
-	
 	
 	public void keyPressed(){
 		switch(key){
@@ -509,10 +687,85 @@ public class MovementSimulator2015 extends PApplet {
 		}
 	}
 	
+	public void reset(){
+		System.out.println("resetting...");
+		parent1 = theFirstBuddy;
+		parent2 = theFirstBuddy;
+		currentGeneration = 0;
+		score1 = -1000;
+		score2 = -1000;
+		currentTick = 0;
+		// Destroy the buddy 
+		for(Body b : currentBuddy.parts){
+			physics.removeBody(b);
+		}
+		// Add a new buddy
+		currentBuddy = breedBuddy(parent1, parent2);
+		// Empty the file
+		File f = new File(buddySaveLoc);
+		f.delete();
+		try {
+			f.createNewFile();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
 	public void mousePressed(){
-		//buddyBattalion.add(breedBuddy(theFirstBuddy, theFirstBuddy, false));
+		// TODO this
+	}
+
+	public void actionPerformed(ActionEvent arg0) {
+		// TODO Auto-generated method stub
+		if(arg0.getSource().equals(resetButton)){
+			reset();
+		}
+		
+	}
+
+	public void stateChanged(ChangeEvent arg0) {
+		if(arg0.getSource().equals(generationSizeEdit)){
+			generationSize = generationSizeEdit.getValue();
+			Hashtable h = new Hashtable();
+			h.put(new Integer(generationSizeEdit.getValue()), new JLabel(Integer.toString(generationSizeEdit.getValue())));
+			generationSizeEdit.setLabelTable(h);
+		}
+		
+		if(arg0.getSource().equals(torqueEditSlider)){
+			maxMotorTorque = torqueEditSlider.getValue() * 200;
+			Hashtable h = new Hashtable();
+			h.put(new Integer((int) maxMotorTorque), new JLabel(Integer.toString((int)maxMotorTorque)));
+			torqueEditSlider.setLabelTable(h);
+		}
+		if(arg0.getSource().equals(tickEditSlider)){
+			maxTick = tickEditSlider.getValue();
+			Hashtable h = new Hashtable();
+			h.put(new Integer(tickEditSlider.getValue()), new JLabel(Integer.toString(tickEditSlider.getValue() + fallTime)));
+			tickEditSlider.setLabelTable(h);
+		}
+		if(arg0.getSource().equals(fpsTargetSlider)){
+			this.frameRate(fpsTargetSlider.getValue());
+			Hashtable h = new Hashtable();
+			h.put(new Integer(fpsTargetSlider.getValue()), new JLabel(Integer.toString(fpsTargetSlider.getValue())));
+			fpsTargetSlider.setLabelTable(h);
+		}
+		if(arg0.getSource().equals(gravityEditSlider)){
+			gravity = gravityEditSlider.getValue();
+			physics.getWorld().setGravity(new Vec2(physics.getWorld().getGravity().x, gravity));
+			Hashtable h = new Hashtable();
+			h.put(new Integer(gravity), new JLabel(Integer.toString(gravity)));
+			gravityEditSlider.setLabelTable(h);
+		}
+		if(arg0.getSource().equals(windEditSlider)){
+			wind = windEditSlider.getValue();
+			physics.getWorld().setGravity(new Vec2(wind, physics.getWorld().getGravity().y));
+			Hashtable h = new Hashtable();
+			h.put(new Integer(wind), new JLabel(Integer.toString(wind)));
+			windEditSlider.setLabelTable(h);
+		}
+		this.savePrefs();
+		
 	}
 }
-
 
 
