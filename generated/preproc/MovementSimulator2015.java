@@ -40,7 +40,6 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	 */
 	
 	// Changeable values
-	// TODO wind modifier
 	int generationSize = 8;
 	int minGenerationSize = 1;
 	int maxGenerationSize = 64;
@@ -66,9 +65,11 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	float startTimingVariance = 60;
 	float startSpeedVariance = 3;
 	float timeIncrease = 1.0f;
+	// TODO make scrolling
+	// TODO add floor variance
 	// TODO friction variance
 	//float frictionAmount = 0.0f;
-	
+	// TODO input a buddy
 	// TODO make variance go up when improvements aren't made
 	
 	// Important variables for the program
@@ -92,9 +93,8 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	private String optionsSaveLoc = "data/options.txt";
 	
 	private String examplePerson = "type,topWidth,topHeight/{appendage}{appendage}/walkingAlgorithm";
-	private String theFirstBuddy = "RECTANGLE,50,50/{CIRCLE,0,10|RECTANGLE,20,50|CIRCLE,0,10|RECTANGLE,20,50}{CIRCLE,0,10|RECTANGLE,20,50|CIRCLE,0,10|RECTANGLE,20,50}/[2,2,3,1,2,2,3,1|30][-2,-2,-3,-1,-2,-2,-3,-1|30]";
+	private String theFirstBuddy = "0,50,50/{1,0,10|0,20,50|1,0,10|0,20,50}{1,0,10|0,20,50|1,0,10|0,20,50}/[2,2,3,1,2,2,3,1|30][-2,-2,-3,-1,-2,-2,-3,-1|30]";
 	
-	//LinkedList<Buddy> buddyBattalion  = new LinkedList<Buddy>();
 	Buddy currentBuddy;
 	
 	int loadPosX = 200;
@@ -132,9 +132,9 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		world = physics.getWorld();
 		
 		initializeGUI();
+		// set background 
 		
-		
-		// Locks the framerate. Not currently in use
+		// Locks the framerate.
 		frameRate(targetFPS);
 		parent1 = parent2 = theFirstBuddy;
 		
@@ -181,6 +181,19 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		
 		// This draws some helpful and informative text on the screen at all times. 
 		drawGUI();
+		// no
+		//this.getGraphics().drawImage(loadImage("/Users/kenjitanaka/Desktop/rainybow.jpg").getImage(), 0, 0, null);
+		g.image(loadImage("/Users/kenjitanaka/Desktop/rainybow.jpg"),0,0);
+		
+		// Scrolling code
+		// TODO
+		if(currentBuddy.getHead().getPosition().x > 0){
+			float delta = currentBuddy.getHead().getPosition().x;
+			
+			for(Body b : currentBuddy.parts){
+				b.setPosition(new Vec2(b.getPosition().x - delta, b.getPosition().y));
+			}
+		}
 			
 		if(currentTick >= fallTime){
 			int currentStage = currentBuddy.getStage();
@@ -214,7 +227,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			}
 			// Resetting variables
 			currentTick = 0;
-			// Deleting the old buddy 
+			// Deleting the old buddy
 			for(Body b : currentBuddy.parts){
 				physics.removeBody(b);
 			}
@@ -244,7 +257,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		// Torque
 		torqueEditSlider = new JSlider();
 		labelTable = new Hashtable();
-		labelTable.put(new Integer(torqueEditSlider.getValue()), new JLabel(Integer.toString(torqueEditSlider.getValue())));
+		labelTable.put(new Integer((int) maxMotorTorque/200), new JLabel(Integer.toString((int) (maxMotorTorque/200))));
 		torqueEditSlider.setLabelTable(labelTable);
 		torqueEditSlider.setPaintLabels(true);
 		torqueEditSlider.addChangeListener(this);
@@ -269,7 +282,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		gravityEditSlider.setLabelTable(labelTable);
 		gravityEditSlider.setPaintLabels(true);
 		gravityEditSlider.addChangeListener(this);
-		// TODO variance
+		// TODO evolution variance
 		windEditSlider = new JSlider(minWind, maxWind, wind);
 		labelTable = new Hashtable();
 		labelTable.put(new Integer(wind), new JLabel(Integer.toString(wind)));
@@ -305,7 +318,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		this.getGraphics().setColor(Color.BLACK);
 		this.text(" FPS: " + Math.round(this.frameRate) +
 				"\n Current Generation: " + currentGeneration + 
-				"\n Sibling #: " + generationBuddyNumber + "/" + generationSize + 
+				"\n Sibling #: " + (generationBuddyNumber + 1) + "/" + generationSize + 
 				"\n Tick: " + currentTick + "/" + (maxTick + fallTime) + 
 				"\n Distance Travelled: " + currentBuddy.getDistanceTravelled(startPixel) +
 				/*"\n Velocity: " + currentBuddy.getHead().getLinearVelocity() + "\n " + landing +*/ 
@@ -368,8 +381,8 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			System.out.println("Head data: " + buddy.substring(0, buddy.indexOf('/')));
 		
 		String torso = buddy.substring(buddy.indexOf(',') + 1, buddy.indexOf('/'));
-		String type = buddy.substring(0, buddy.indexOf(','));
-		b.parts.add(loadPart(torso, toEnum(type), category, 31, verbose));
+		int type = Integer.parseInt(buddy.substring(0, buddy.indexOf(',')));
+		b.parts.add(loadPart(torso, partType.values()[type], category, 31, verbose));
 		
 		// APPENDAGES
 		if(verbose)
@@ -400,7 +413,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	}
 	
 	private BuddyInstructions loadWalkingData(String program, boolean verbose){
-		// TODO
+		
 		if(verbose)
 			System.out.println("\nWalking data: " + program);
 		
@@ -471,7 +484,6 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		ArrayList<ArrayList<Float>> childSpeeds = new ArrayList<ArrayList<Float>>();
 		ArrayList<Float> timings = new ArrayList<Float>();
 		
-		// TODO add variance
 		int childInstructionsLength = (momCode.speeds.size() + dadCode.speeds.size()) / 2;
 		
 		for(int i = 0; i < childInstructionsLength; i ++){
@@ -538,7 +550,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 				yPos += yMax;
 			}
 			
-			b.addPart(loadPart(p.substring(p.indexOf(',') + 1), toEnum(p.substring(0, p.indexOf(','))),xPos, yPos, category, collisionmask, verbose));
+			b.addPart(loadPart(p.substring(p.indexOf(',') + 1), partType.values()[(Integer.parseInt(p.substring(0, p.indexOf(','))))],xPos, yPos, category, collisionmask, verbose));
 			b.addJoint(physics.createRevoluteJoint(previousPart, b.parts.get(b.parts.size() - 1), physics.getPosition(previousPart).x, yPos), maxMotorTorque);
 			previousPart = b.parts.get(b.parts.size() - 1);
 		}
@@ -612,7 +624,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			try {
 				f.createNewFile();
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
+				// Shouldn't happen
 				e.printStackTrace();
 			}
 		}
@@ -621,7 +633,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			bf.write("generationSize=" + generationSize + "\nmaxTorque=" + maxMotorTorque + "\nticksPerSibling=" + maxTick + "\ntargetFPS="+ targetFPS + "\ngravity=" + gravity + "\nwind=" + wind);
 			bf.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
+			// Won't happen because file is always created
 			e.printStackTrace();
 		}
 		// Generation size
@@ -629,6 +641,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		// Ticks per sibling
 		// Target fps
 		// Gravity
+		// Wind
 		
 	}
 	
@@ -657,6 +670,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	
 	enum partType {RECTANGLE, CIRCLE, POLYGON};
 	
+	/*
 	private partType toEnum(String type){
 		type = type.toUpperCase();
 		if(type.equals("RECTANGLE")){
@@ -666,7 +680,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		}
 		
 		return partType.POLYGON;
-	}
+	}*/
 	
 	public void keyPressed(){
 		switch(key){
@@ -734,7 +748,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		if(arg0.getSource().equals(torqueEditSlider)){
 			maxMotorTorque = torqueEditSlider.getValue() * 200;
 			Hashtable h = new Hashtable();
-			h.put(new Integer((int) maxMotorTorque), new JLabel(Integer.toString((int)maxMotorTorque)));
+			h.put(new Integer((int) maxMotorTorque/200), new JLabel(Integer.toString((int) (maxMotorTorque/200))));
 			torqueEditSlider.setLabelTable(h);
 		}
 		if(arg0.getSource().equals(tickEditSlider)){
