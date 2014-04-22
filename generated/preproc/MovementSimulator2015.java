@@ -133,6 +133,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		physics.setDensity(1.0f);
 		world = physics.getWorld();
 		
+		
 		initializeGUI();
 		// set background 
 		
@@ -164,7 +165,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			e.printStackTrace();
 		}
 		
-		bgImage = loadImage("data/rainbow.png");
+		bgImage = loadImage("data/gradient2.png");
 		
 		// Set the first parents to be the input
 		nextGen1 = parent1;
@@ -184,12 +185,20 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	public void draw() {
 		// Finding if i need to translate the buddy
 		if(currentBuddy.getHead().getPosition().x > 0){
+			float delta = 0 - currentBuddy.getHead().getPosition().x;
+			
+			bgImageDelta += delta;
+			
+			for(Body p : currentBuddy.parts){
+				p.setPosition(new Vec2(p.getPosition().x + delta, p.getPosition().y));
+			}
 			
 		}
 		
 		
 		// Draw the background so that it doesn't have the previous frame as the background
 		this.image(bgImage, bgImageDelta % bgImage.width, 0);
+		this.image(bgImage, bgImage.width + bgImageDelta % bgImage.width, 0);
 		
 		// This draws some helpful and informative text on the screen at all times. 
 		drawGUI();
@@ -326,7 +335,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	}
 	
 	public void drawGUI(){
-		this.getGraphics().setColor(Color.WHITE);
+		fill(255, 255, 255);
 		this.text(" FPS: " + Math.round(this.frameRate) +
 				"\n Current Generation: " + currentGeneration + 
 				"\n Sibling #: " + (generationBuddyNumber + 1) + "/" + generationSize + 
