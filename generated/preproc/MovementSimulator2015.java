@@ -106,6 +106,8 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	JFrame controlFrame;
 	JPanel controlPanel;
 	
+	PImage bgImage;
+	
 	JLabel generationEditLabel = new JLabel("Generation size:");
 	JSlider generationSizeEdit;
 	JLabel torqueEditLabel = new JLabel("Max motor torque:");
@@ -162,6 +164,8 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			e.printStackTrace();
 		}
 		
+		bgImage = loadImage("data/rainbow.png");
+		
 		// Set the first parents to be the input
 		nextGen1 = parent1;
 		nextGen2 = parent2;
@@ -174,18 +178,25 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		
 	}
 	int fallTime = 140;
+	
+	int bgImageDelta = 0;
 	// Draw is basically used as a new thread with a wile loop for this program
 	public void draw() {
+		// Finding if i need to translate the buddy
+		if(currentBuddy.getHead().getPosition().x > 0){
+			
+		}
+		
+		
 		// Draw the background so that it doesn't have the previous frame as the background
-		background(255, 255, 255);
+		this.image(bgImage, bgImageDelta % bgImage.width, 0);
 		
 		// This draws some helpful and informative text on the screen at all times. 
 		drawGUI();
 		// no
 		//this.getGraphics().drawImage(loadImage("/Users/kenjitanaka/Desktop/rainybow.jpg").getImage(), 0, 0, null);
-		g.image(loadImage("/Users/kenjitanaka/Desktop/rainybow.jpg"),0,0);
 		
-		// Scrolling code
+		
 		// TODO
 		if(currentBuddy.getHead().getPosition().x > 0){
 			float delta = currentBuddy.getHead().getPosition().x;
@@ -315,7 +326,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	}
 	
 	public void drawGUI(){
-		this.getGraphics().setColor(Color.BLACK);
+		this.getGraphics().setColor(Color.WHITE);
 		this.text(" FPS: " + Math.round(this.frameRate) +
 				"\n Current Generation: " + currentGeneration + 
 				"\n Sibling #: " + (generationBuddyNumber + 1) + "/" + generationSize + 
