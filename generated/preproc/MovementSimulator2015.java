@@ -891,7 +891,9 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 				bigHolder.add(buttonHolder);
 				
 				colorPopup.add(bigHolder);
+				colorPopup.pack();
 				colorPopup.setVisible(true);
+				
 			}
 		}
 		if(arg0.getSource().equals(guiButton)){
