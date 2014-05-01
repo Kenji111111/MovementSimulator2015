@@ -4,3 +4,6 @@ ticksPerSibling=640
 targetFPS=60.0
 gravity=-10
 wind=0
+guiOn=false
+fillColor=-16777215
+strokeColor=-1

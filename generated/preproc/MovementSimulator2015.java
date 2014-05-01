@@ -13,13 +13,18 @@ import java.text.*;
 import java.util.*;
 import java.util.prefs.Preferences;
 
+import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JColorChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.border.Border;
+import javax.swing.colorchooser.AbstractColorChooserPanel;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
@@ -28,6 +33,7 @@ import org.jbox2d.dynamics.*;
 import org.jbox2d.dynamics.joints.RevoluteJoint;
 import org.jbox2d.p5.Physics;
 import org.jbox2d.collision.*;
+import org.jbox2d.common.Color3f;
 import org.jbox2d.common.Vec2;
 import org.w3c.dom.css.Rect;
 
@@ -61,16 +67,21 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	int maxWind = 30;
 	
 	float maxMotorTorque = 10000f;
+	
+	float minDVariance = .01f;
 	float deltaVariance = .95f;
+	float deltaVarianceMod = 1f;
+	float maxDVariance = 3f;
 	float startTimingVariance = 60;
 	float startSpeedVariance = 3;
-	float timeIncrease = 1.0f;
-	// TODO make scrolling
+	
+	boolean rainbowMode = false;
+	boolean guiOn = true;
+	
+	int fillColor = color(0,0,0);
+	int strokeColor = color(255,255,255);
 	// TODO add floor variance
-	// TODO friction variance
-	//float frictionAmount = 0.0f;
-	// TODO input a buddy
-	// TODO make variance go up when improvements aren't made
+	// TODO feet stationary??
 	
 	// Important variables for the program
 	private Physics physics;
@@ -84,13 +95,16 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	private String parent1 = "";
 	private String parent2 = "";
 
-	private float score1 = -1000;
-	private float score2 = -1000;
+	private float currentScore = 0;
+	private float score1 = -100;
+	private float score2 = -100;
 	private String nextGen1 = "";
 	private String nextGen2 = "";
 	
 	private String buddySaveLoc = "data/savedBuddies.txt";
 	private String optionsSaveLoc = "data/options.txt";
+	private String bgImageLoc = "data/gradientV3.png";
+	private String rainbowBgLoc = "data/rainbow.png";
 	
 	private String examplePerson = "type,topWidth,topHeight/{appendage}{appendage}/walkingAlgorithm";
 	private String theFirstBuddy = "0,50,50/{1,0,10|0,20,50|1,0,10|0,20,50}{1,0,10|0,20,50|1,0,10|0,20,50}/[2,2,3,1,2,2,3,1|30][-2,-2,-3,-1,-2,-2,-3,-1|30]";
@@ -102,11 +116,14 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	
 	float startPixel = 0;
 	
+	customDrawer cd;
+	
 	// GUI Elements
 	JFrame controlFrame;
 	JPanel controlPanel;
 	
 	PImage bgImage;
+	PImage rainbowBG;
 	
 	JLabel generationEditLabel = new JLabel("Generation size:");
 	JSlider generationSizeEdit;
@@ -114,28 +131,32 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	JSlider torqueEditSlider;
 	JLabel tickEditLabel = new JLabel("Ticks per sibling:");
 	JSlider tickEditSlider;
+	JLabel evolutionSpeedLabel = new JLabel("Evolution Deviation:");
+	JSlider evolutionSpeedSlider;
 	JLabel fpsTargetLabel = new JLabel("Target FPS:");
 	JSlider fpsTargetSlider;
 	JLabel gravityEditLabel = new JLabel("Force of gravity:");
 	JSlider gravityEditSlider;
 	JLabel windEditLabel = new JLabel("Force of wind");
 	JSlider windEditSlider;
-	// TODO replay system
 	JLabel controlsList = new JLabel("<HTML>Keyboard controls:<BR>Replay best buddies: NONE</HTML>");
-	JButton resetButton = new JButton("reset simulation");
+	JButton resetButton = new JButton("Reset Simulation");
+	JButton inputBuddyButton = new JButton("Input Buddy");
+	JButton guiButton = new JButton("Toggle GUI");
+	JButton rainbowModeButton = new JButton("rainbow mode (OFF)");
+	JButton inputColorButton = new JButton("Buddy colors...");
 	
 	public void setup() {
-		loadPrefs();
 		// Set the window size
 		size(900, 600);
 		// Create the physics environment for the program
 		physics = new Physics(this, 4000, getHeight());
 		physics.setDensity(1.0f);
 		world = physics.getWorld();
-		
-		
+		physics.setCustomRenderingMethod(this, "customRender");
+
+		loadPrefs();
 		initializeGUI();
-		// set background 
 		
 		// Locks the framerate.
 		frameRate(targetFPS);
@@ -165,7 +186,8 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			e.printStackTrace();
 		}
 		
-		bgImage = loadImage("data/gradient2.png");
+		bgImage = loadImage(bgImageLoc);
+		rainbowBG = loadImage(rainbowBgLoc);
 		
 		// Set the first parents to be the input
 		nextGen1 = parent1;
@@ -181,13 +203,14 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	int fallTime = 140;
 	
 	int bgImageDelta = 0;
+	int generationSinceImprovement = 0;
 	// Draw is basically used as a new thread with a wile loop for this program
 	public void draw() {
 		// Finding if i need to translate the buddy
 		if(currentBuddy.getHead().getPosition().x > 0){
 			float delta = 0 - currentBuddy.getHead().getPosition().x;
-			
-			bgImageDelta += delta;
+			//System.out.println(physics.worldToScreen(delta));
+			bgImageDelta += physics.worldToScreen(delta);
 			
 			for(Body p : currentBuddy.parts){
 				p.setPosition(new Vec2(p.getPosition().x + delta, p.getPosition().y));
@@ -195,32 +218,28 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			
 		}
 		
+		currentScore = currentBuddy.getDistanceTravelled(startPixel) - bgImageDelta;
 		
 		// Draw the background so that it doesn't have the previous frame as the background
-		this.image(bgImage, bgImageDelta % bgImage.width, 0);
-		this.image(bgImage, bgImage.width + bgImageDelta % bgImage.width, 0);
-		
-		// This draws some helpful and informative text on the screen at all times. 
-		drawGUI();
-		// no
-		//this.getGraphics().drawImage(loadImage("/Users/kenjitanaka/Desktop/rainybow.jpg").getImage(), 0, 0, null);
-		
-		
-		// TODO
-		if(currentBuddy.getHead().getPosition().x > 0){
-			float delta = currentBuddy.getHead().getPosition().x;
-			
-			for(Body b : currentBuddy.parts){
-				b.setPosition(new Vec2(b.getPosition().x - delta, b.getPosition().y));
-			}
+		if(!rainbowMode){
+			this.image(bgImage, bgImageDelta % bgImage.width, 0);
+			this.image(bgImage, bgImage.width + (bgImageDelta % bgImage.width), 0);
+		} else {
+			this.image(rainbowBG, bgImageDelta % rainbowBG.width, 0);
+			this.image(rainbowBG, rainbowBG.width + (bgImageDelta % rainbowBG.width), 0);
 		}
+		
+		// This draws some helpful and informative text on the screen. 
+		if(guiOn)
+			drawGUI();
 			
 		if(currentTick >= fallTime){
 			int currentStage = currentBuddy.getStage();
 			int i = 0;
 			
 			for(RevoluteJoint j : currentBuddy.joints){
-				j.setMotorSpeed(currentBuddy.instructions.speeds.get(currentStage).get(i));
+				float speed = currentBuddy.instructions.speeds.get(currentStage).get(i);
+				j.setMotorSpeed(speed);
 				i++;
 			}
 		}
@@ -229,16 +248,19 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		if(currentTick >= maxTick + fallTime){
 			//System.out.println(currentBuddy.toString());
 			// Parents of the next generation
-			float myScore = (currentBuddy.getDistanceTravelled(startPixel));
-			if(myScore > score1 || myScore > score2){
+			bgImageDelta = 0;
+			if(currentScore > score1 || currentScore > score2){
+				generationSinceImprovement = 0;
 				//System.out.println(currentBuddy.toString());
 				if(score1 < score2){
 					nextGen1 = currentBuddy.toString();
-					score1 = myScore;
+					score1 = currentScore;
 				} else {
 					nextGen2 = currentBuddy.toString();
-					score2 = myScore;
+					score2 = currentScore;
 				}
+			} else {
+				generationSinceImprovement++;
 			}
 			// When a new generation happens
 			generationBuddyNumber++;
@@ -257,6 +279,65 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			
 		}
 		
+	}
+	
+	int frameCounter = 0;
+	int rainbowColor1;
+	int rainbowColor2;
+	public void customRender(World world){
+		Body body;
+		for (body = world.getBodyList(); body != null; body = body.getNext()) {
+			fill(fillColor);
+			stroke(strokeColor);
+			if(rainbowMode){
+				if(frameCounter == 0){
+					Random r = new Random();
+					rainbowColor1 = color(r.nextInt(256), r.nextInt(256), r.nextInt(256));	
+					rainbowColor2 = color(r.nextInt(256), r.nextInt(256), r.nextInt(256));
+				} 
+				frameCounter = (frameCounter + 1) % 70;
+				
+				fill(rainbowColor1);
+				stroke(rainbowColor2);
+			}
+			
+			 
+		    // iterate through the shapes of the body
+		    org.jbox2d.collision.Shape shape;
+		    for (shape = body.getShapeList(); shape != null; shape = shape.getNext()) {
+		 
+		      // find out the shape type
+		      ShapeType st = shape.getType();
+		      if (st == ShapeType.POLYGON_SHAPE) {
+		 
+		        // polygon? let's iterate through its vertices while using begin/endShape()
+		        beginShape();
+		        PolygonShape poly = (PolygonShape) shape;
+		        int count = poly.getVertexCount();
+		        Vec2[] verts = poly.getVertices();
+		        for(int i = 0; i < count; i++) {
+		          Vec2 vert = physics.worldToScreen(body.getWorldPoint(verts[i]));
+		          vertex(vert.x, vert.y);
+		        }
+		        Vec2 firstVert = physics.worldToScreen(body.getWorldPoint(verts[0]));
+		        vertex(firstVert.x, firstVert.y);
+		        endShape();
+		 
+		      }
+		      else if (st == ShapeType.CIRCLE_SHAPE) {
+		 
+		        // circle? let's find its center and radius and draw an ellipse
+		        CircleShape circle = (CircleShape) shape;
+		        Vec2 pos = physics.worldToScreen(body.getWorldPoint(circle.getLocalPosition()));
+		        float radius = physics.worldToScreen(circle.getRadius());
+		        ellipseMode(CENTER);
+		        ellipse(pos.x, pos.y, radius*2, radius*2);
+		        // we'll add one more line to see how it rotates
+		        line(pos.x, pos.y, pos.x + radius*cos(-body.getAngle()), pos.y + radius*sin(-body.getAngle()));
+		 
+		      }
+		    }
+		  }
 	}
 	
 	public void initializeGUI(){
@@ -288,6 +369,13 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		tickEditSlider.setLabelTable(labelTable);
 		tickEditSlider.setPaintLabels(true);
 		tickEditSlider.addChangeListener(this);
+		// Evolution Speed 
+		evolutionSpeedSlider = new JSlider(Math.round(minDVariance * 100), Math.round(maxDVariance * 100), Math.round(deltaVarianceMod * 100));
+		labelTable = new Hashtable();
+		labelTable.put(Math.round(deltaVarianceMod * 100), new JLabel(Integer.toString(Math.round(deltaVarianceMod * 100))));
+		evolutionSpeedSlider.setLabelTable(labelTable);
+		evolutionSpeedSlider.setPaintLabels(true);
+		evolutionSpeedSlider.addChangeListener(this);
 		// FPS
 		fpsTargetSlider = new JSlider((int) minTargetFPS, (int) maxTargetFPS, (int) targetFPS);
 		labelTable = new Hashtable();
@@ -302,7 +390,6 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		gravityEditSlider.setLabelTable(labelTable);
 		gravityEditSlider.setPaintLabels(true);
 		gravityEditSlider.addChangeListener(this);
-		// TODO evolution variance
 		windEditSlider = new JSlider(minWind, maxWind, wind);
 		labelTable = new Hashtable();
 		labelTable.put(new Integer(wind), new JLabel(Integer.toString(wind)));
@@ -312,7 +399,16 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 
 		// Reset Button
 		resetButton.addActionListener(this);
-		//resetButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+		inputBuddyButton.addActionListener(this);
+		guiButton.addActionListener(this);
+		rainbowModeButton.addActionListener(this);
+		inputColorButton.addActionListener(this);
+		
+		resetButton.setFocusPainted(false);
+		inputBuddyButton.setFocusPainted(false);
+		guiButton.setFocusPainted(false);
+		rainbowModeButton.setFocusPainted(false);
+		inputColorButton.setFocusPainted(false);
 
 		controlPanel.add(generationEditLabel);
 		controlPanel.add(generationSizeEdit);
@@ -320,6 +416,8 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		controlPanel.add(torqueEditSlider);
 		controlPanel.add(tickEditLabel);
 		controlPanel.add(tickEditSlider);
+		controlPanel.add(evolutionSpeedLabel);
+		controlPanel.add(evolutionSpeedSlider);
 		controlPanel.add(fpsTargetLabel);
 		controlPanel.add(fpsTargetSlider);
 		controlPanel.add(gravityEditLabel);
@@ -328,6 +426,10 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		controlPanel.add(windEditSlider);
 		//controlPanel.add(controlsList);
 		controlPanel.add(resetButton);
+		controlPanel.add(inputBuddyButton);
+		controlPanel.add(guiButton);
+		controlPanel.add(rainbowModeButton);
+		controlPanel.add(inputColorButton);
 		
 		controlFrame.add(controlPanel);
 		controlFrame.pack();
@@ -340,7 +442,7 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 				"\n Current Generation: " + currentGeneration + 
 				"\n Sibling #: " + (generationBuddyNumber + 1) + "/" + generationSize + 
 				"\n Tick: " + currentTick + "/" + (maxTick + fallTime) + 
-				"\n Distance Travelled: " + currentBuddy.getDistanceTravelled(startPixel) +
+				"\n Distance Travelled: " + currentScore +
 				/*"\n Velocity: " + currentBuddy.getHead().getLinearVelocity() + "\n " + landing +*/ 
 				"\n Max Scores: " + score1 + ", " + score2, 20, 20);
 	}
@@ -352,10 +454,12 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		parent1 = nextGen1;
 		parent2 = nextGen2;
 
-		speedVariance *= deltaVariance;
-		timingVariance *= deltaVariance;
-		maxTick *= timeIncrease;
-		// System.out.println(parent1 + "\n" + parent2);
+		speedVariance *= deltaVariance * deltaVarianceMod;
+		timingVariance *= deltaVariance * deltaVarianceMod;
+		if(generationSinceImprovement >= 5){
+			speedVariance *= 1.5;
+			timingVariance *= 1.5;
+		}
 		// Saving the buddies to a string
 		try {
 			BufferedWriter bw = new BufferedWriter(new FileWriter("data/savedBuddies.txt"));
@@ -601,8 +705,9 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			pd.density = 1.0f;
 			
 			Body b = world.createBody(bd);
-			
 			b.createShape(pd);
+			
+			
 			b.setMassFromShapes();
 			
 			return b;
@@ -650,18 +755,14 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 		}
 		try {
 			BufferedWriter bf = new BufferedWriter(new FileWriter(f));
-			bf.write("generationSize=" + generationSize + "\nmaxTorque=" + maxMotorTorque + "\nticksPerSibling=" + maxTick + "\ntargetFPS="+ targetFPS + "\ngravity=" + gravity + "\nwind=" + wind);
+			bf.write("generationSize=" + generationSize + "\nmaxTorque=" + maxMotorTorque + "\nticksPerSibling=" + maxTick
+					+ "\ntargetFPS="+ targetFPS + "\ngravity=" + gravity + "\nwind=" + wind + "\nguiOn=" + guiOn
+					+ "\nfillColor=" + fillColor + "\nstrokeColor=" + strokeColor);
 			bf.close();
 		} catch (IOException e) {
 			// Won't happen because file is always created
 			e.printStackTrace();
 		}
-		// Generation size
-		// Max motor torque
-		// Ticks per sibling
-		// Target fps
-		// Gravity
-		// Wind
 		
 	}
 	
@@ -676,31 +777,30 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			maxTick = Integer.parseInt(s.substring(s.indexOf('=') + 1));
 			s = sc.nextLine();
 			targetFPS = Float.parseFloat(s.substring(s.indexOf('=') + 1));
+			this.frameRate(targetFPS);
 			s = sc.nextLine();
 			gravity = Integer.parseInt(s.substring(s.indexOf('=') + 1));
 			s = sc.nextLine();
 			wind = Integer.parseInt(s.substring(s.indexOf('=') + 1));
+			world.setGravity(new Vec2(wind, gravity));
+			
+			s = sc.nextLine();
+			guiOn = Boolean.parseBoolean(s.substring(s.indexOf('=') + 1));
+			s = sc.nextLine();
+			fillColor = Integer.parseInt(s.substring(s.indexOf('=') + 1));
+			s = sc.nextLine();
+			strokeColor = Integer.parseInt(s.substring(s.indexOf('=') + 1));
 			
 		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
+		} catch (NoSuchElementException ne){
+			ne.printStackTrace();
+			savePrefs();
 		}
 		
 	}
 	
 	enum partType {RECTANGLE, CIRCLE, POLYGON};
-	
-	/*
-	private partType toEnum(String type){
-		type = type.toUpperCase();
-		if(type.equals("RECTANGLE")){
-			return partType.RECTANGLE;
-		} else if(type.equals("CIRCLE")){
-			return partType.CIRCLE;
-		}
-		
-		return partType.POLYGON;
-	}*/
 	
 	public void keyPressed(){
 		switch(key){
@@ -722,9 +822,11 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	}
 	
 	public void reset(){
-		System.out.println("resetting...");
-		parent1 = theFirstBuddy;
-		parent2 = theFirstBuddy;
+		reset(theFirstBuddy);
+	}
+	
+	public void reset(String seed){
+		parent1 = parent2 = seed;
 		currentGeneration = 0;
 		score1 = -1000;
 		score2 = -1000;
@@ -746,15 +848,121 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 	}
 	
 	public void mousePressed(){
-		// TODO this
+		
 	}
+	
+	JFrame buddyPopup = null;
+	JButton cancelButton;
+	JButton acceptButton;
+	JTextArea buddyInputArea;
+	
+	JFrame colorPopup = null;
+	JColorChooser jccFill;
 
 	public void actionPerformed(ActionEvent arg0) {
-		// TODO Auto-generated method stub
 		if(arg0.getSource().equals(resetButton)){
 			reset();
 		}
-		
+		if(arg0.getSource().equals(inputColorButton)){
+			if(buddyPopup == null && colorPopup == null){
+				colorPopup = new JFrame("Buddy Color Picker 0.0.1");
+				colorPopup.setSize(400, 300);
+				colorPopup.setLocationRelativeTo(null);
+				
+				jccFill = new JColorChooser();
+				jccFill.setPreviewPanel(new JPanel());
+				jccFill.setChooserPanels(new AbstractColorChooserPanel[]{jccFill.getChooserPanels()[1]});
+				
+				cancelButton = new JButton("cancel");
+				acceptButton = new JButton("accept");
+				cancelButton.addActionListener(this);
+				acceptButton.addActionListener(this);
+				
+				JPanel buttonHolder = new JPanel();
+				BoxLayout buttonLayout = new BoxLayout(buttonHolder, BoxLayout.LINE_AXIS);
+				
+				buttonHolder.add(cancelButton);
+				buttonHolder.add(acceptButton);
+				
+				JPanel bigHolder = new JPanel();
+				BoxLayout bigLayout = new BoxLayout(bigHolder, BoxLayout.PAGE_AXIS);
+				
+				bigHolder.add(jccFill);
+				bigHolder.add(buttonHolder);
+				
+				colorPopup.add(bigHolder);
+				colorPopup.setVisible(true);
+			}
+		}
+		if(arg0.getSource().equals(guiButton)){
+			guiOn = !guiOn;
+		}
+		if(arg0.getSource().equals(rainbowModeButton)){
+			if(rainbowMode){
+				rainbowMode = false;
+				rainbowModeButton.setText("rainbow mode (OFF)");
+			} else {
+				rainbowMode = true;
+				rainbowModeButton.setText("rainbow mode (ON)");
+			}
+		}
+		if(arg0.getSource().equals(acceptButton)){
+			if(buddyPopup != null){
+				// TODO check if the string works ecetera
+				reset(buddyInputArea.getText());
+				buddyPopup.dispose();
+				buddyPopup = null;
+			}
+			if(colorPopup != null){
+				// TODO set colors
+				fillColor = color(jccFill.getColor().getRed(), jccFill.getColor().getGreen(), jccFill.getColor().getBlue(), jccFill.getColor().getAlpha());
+				strokeColor = color(255 - jccFill.getColor().getRed(), 255 - jccFill.getColor().getGreen(), 255 - jccFill.getColor().getBlue(), jccFill.getColor().getAlpha());
+				colorPopup.dispose();
+				colorPopup = null;
+			}
+			savePrefs();
+		}
+		if(arg0.getSource().equals(cancelButton)){
+			if(buddyPopup != null){
+				buddyPopup.dispose();
+				buddyPopup = null;
+			} else if(colorPopup != null){
+				colorPopup.dispose();
+				colorPopup = null;
+			}
+			
+		}
+		if(arg0.getSource().equals(inputBuddyButton)){
+			if(buddyPopup == null && colorPopup == null){
+				buddyPopup = new JFrame("Buddy Loader 1.0.0");
+				buddyPopup.setSize(400, 200);
+				buddyPopup.setLocationRelativeTo(null);
+				
+				JPanel bigHolder = new JPanel();
+				BoxLayout ba = new BoxLayout(bigHolder, BoxLayout.LINE_AXIS);
+				
+				cancelButton = new JButton("cancel");
+				acceptButton = new JButton("accept");
+				cancelButton.addActionListener(this);
+				acceptButton.addActionListener(this);
+				
+				buddyInputArea = new JTextArea(7,20);
+				
+				JPanel buttonHolder = new JPanel();
+				
+				BoxLayout bl = new BoxLayout(buttonHolder, BoxLayout.X_AXIS);
+				
+				buttonHolder.add(cancelButton);
+				buttonHolder.add(acceptButton);
+				
+				bigHolder.add(buddyInputArea);
+				bigHolder.add(buttonHolder);
+				
+				buddyPopup.add(bigHolder);
+				buddyPopup.setVisible(true);
+			}
+		}
+		savePrefs();
 	}
 
 	public void stateChanged(ChangeEvent arg0) {
@@ -777,8 +985,15 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			h.put(new Integer(tickEditSlider.getValue()), new JLabel(Integer.toString(tickEditSlider.getValue() + fallTime)));
 			tickEditSlider.setLabelTable(h);
 		}
+		if(arg0.getSource().equals(evolutionSpeedSlider)){
+			deltaVarianceMod = evolutionSpeedSlider.getValue()/100;
+			Hashtable h = new Hashtable();
+			h.put(new Integer(evolutionSpeedSlider.getValue()), new JLabel(Integer.toString(evolutionSpeedSlider.getValue())));
+			evolutionSpeedSlider.setLabelTable(h);
+		}
 		if(arg0.getSource().equals(fpsTargetSlider)){
 			this.frameRate(fpsTargetSlider.getValue());
+			targetFPS = fpsTargetSlider.getValue();
 			Hashtable h = new Hashtable();
 			h.put(new Integer(fpsTargetSlider.getValue()), new JLabel(Integer.toString(fpsTargetSlider.getValue())));
 			fpsTargetSlider.setLabelTable(h);
@@ -797,9 +1012,10 @@ public class MovementSimulator2015 extends PApplet implements ActionListener, Ch
 			h.put(new Integer(wind), new JLabel(Integer.toString(wind)));
 			windEditSlider.setLabelTable(h);
 		}
-		this.savePrefs();
+		savePrefs();
 		
 	}
+	
 }
 
 
